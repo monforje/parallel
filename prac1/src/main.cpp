@@ -16,13 +16,13 @@ int main() {
         double t_0 = omp_get_wtime();
         auto r = sum(data.get(), n);
         double t_1 = omp_get_wtime();
-        printf("Result if sum_par: %u, it took %gms\n", r, (t_0 - t_1) * 1000);
+        printf("Result if sum_par: %u, it took %gms\n", r, (t_1 - t_0) * 1000);
 
         // async
         double t_2 = omp_get_wtime();
         auto r_par = sum_par(data.get(), n);
         double t_3 = omp_get_wtime();
-        printf("Result if sum_par: %u, it took %gms\n", r_par, (t_2 - t_3) * 1000);
+        printf("Result if sum_par: %u, it took %gms\n", r_par, (t_3 - t_2) * 1000);
     }
 
     return 0;
