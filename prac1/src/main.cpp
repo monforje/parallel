@@ -16,7 +16,7 @@ int main() {
         double t_0 = omp_get_wtime();
         auto r = sum(data.get(), n);
         double t_1 = omp_get_wtime();
-        printf("Result if sum_par: %u, it took %gms\n", r, (t_1 - t_0) * 1000);
+        printf("Result if sum: %u, it took %gms\n", r, (t_1 - t_0) * 1000);
 
         // async
         double t_2 = omp_get_wtime();
