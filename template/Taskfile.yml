@@ -1,0 +1,105 @@
+version: '3'
+
+vars:
+  CXX: '{{.CXX | default "g++"}}'
+  CC: '{{if eq .CXX "clang++"}}clang{{else}}gcc{{end}}'
+  TYPE: '{{.TYPE | default "Release"}}'
+  DIR: build/{{.CXX}}-{{.TYPE}}{{if .SAN}}-{{.SAN}}{{end}}
+  THREADS: '{{.THREADS | default ""}}'
+
+# Переменные: CXX=clang++|g++  TYPE=Debug|Release  SAN=address|thread|undefined  THREADS=N
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  configure:
+    desc: cmake configure
+    cmds:
+      - cmake -S . -B {{.DIR}} -G Ninja -DCMAKE_C_COMPILER={{.CC}} -DCMAKE_CXX_COMPILER={{.CXX}} -DCMAKE_BUILD_TYPE={{.TYPE}} -DSANITIZE={{.SAN}}
+      - ln -sf {{.DIR}}/compile_commands.json compile_commands.json
+    status:
+      - test -f {{.DIR}}/build.ninja
+
+  build:
+    desc: сборка
+    deps: [configure]
+    cmds:
+      - cmake --build {{.DIR}}
+
+  run:
+    desc: запуск (THREADS=N задаёт число потоков)
+    deps: [build]
+    cmds:
+      - '{{if .THREADS}}OMP_NUM_THREADS={{.THREADS}} {{end}}./{{.DIR}}/app {{.CLI_ARGS}}'
+
+  debug:
+    desc: сборка Debug + gdb
+    cmds:
+      - TYPE=Debug task build
+      - gdb --args ./build/{{.CXX}}-Debug/app {{.CLI_ARGS}}
+
+  scale:
+    desc: время при 1,2,4,8,.. потоках
+    deps: [build]
+    cmds:
+      - for t in 1 2 4 8 16; do OMP_NUM_THREADS=$t ./{{.DIR}}/app; done
+
+  tsan:
+    desc: поиск гонок (ThreadSanitizer)
+    cmds:
+      - TYPE=Debug SAN=thread task run
+
+  asan:
+    desc: AddressSanitizer
+    cmds:
+      - TYPE=Debug SAN=address task run
+
+  compile:
+    desc: 'без cmake:  task compile -- src/main.cpp src/c/sum.c  (без аргументов — все файлы из src/)'
+    vars:
+      FLAGS: >-
+        -Wall -Wextra -Wpedantic -fopenmp -Iinclude
+        {{if eq .TYPE "Debug"}}-O0 -g{{else}}-O2{{end}}
+        {{if .SAN}}-fsanitize={{.SAN}} -fno-omit-frame-pointer -g{{end}}
+    cmds:
+      - |
+        set -- {{.FILE}} {{.CLI_ARGS}}
+        [ $# -gt 0 ] || set -- $(find src -name '*.c' -o -name '*.cpp' | sort)
+        out=build/single; mkdir -p $out
+        objs=""; link={{.CC}}; exe=""
+        for f in "$@"; do
+          f=${f#FILE=}
+          [ -f "$f" ] || { echo "нет файла: '$f'"; exit 1; }
+          case "$f" in
+            *.c)   cc={{.CC}};  std=-std=c17 ;;
+            *.cpp) cc={{.CXX}}; std=-std=c++23; link={{.CXX}} ;;
+            *)     echo "не .c/.cpp: '$f'"; exit 1 ;;
+          esac
+          o=$out/$(echo "${f%.*}" | tr / _).o
+          $cc $std {{.FLAGS}} -c "$f" -o "$o" || exit 1
+          objs="$objs $o"
+          if grep -qE '\bmain[[:space:]]*\(' "$f"; then exe=$out/$(basename "${f%.*}"); fi
+        done
+        if [ -n "$exe" ]; then
+          $link {{.FLAGS}} $objs -o "$exe" || { echo "undefined reference? передай и нужные .c, или запусти task compile без аргументов"; exit 1; }
+          echo "-> $exe"
+        else
+          echo "->${objs} (main нет, только объектники)"
+        fi
+    silent: true
+
+  fmt:
+    desc: clang-format
+    cmds: ['find src include -name "*.[ch]" -o -name "*.[ch]pp" | xargs clang-format -i']
+
+  tidy:
+    desc: clang-tidy
+    deps: [configure]
+    cmds: ['find src -name "*.cpp" | xargs clang-tidy -p {{.DIR}}']
+
+  clean:
+    desc: удалить build/
+    cmds:
+      - rm -rf build compile_commands.json

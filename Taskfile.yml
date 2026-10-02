@@ -1,0 +1,57 @@
+version: '3'
+
+# Корень: создание подпроектов и общий docker. Внутри подпроекта работает его собственный Taskfile.
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  new:
+    desc: 'новый подпроект:  task new -- lab1'
+    cmds:
+      - test -n "{{.CLI_ARGS}}" && ! test -e "{{.CLI_ARGS}}"
+      - cp -r template "{{.CLI_ARGS}}"
+      - echo "создан {{.CLI_ARGS}}/ -> cd {{.CLI_ARGS}} && task run"
+    silent: true
+
+  run:
+    desc: 'запуск подпроекта из корня:  task run -- prac1  (CXX/TYPE/THREADS/SAN пробрасываются)'
+    vars:
+      P: '{{.P | default .CLI_ARGS}}'
+    cmds:
+      - |
+        [ -n "{{.P}}" ] && [ -f "{{.P}}/Taskfile.yml" ] || { echo "укажи подпроект: task run -- <имя>"; ls -d */ | grep -v template; exit 1; }
+      - >-
+        task -d "{{.P}}" run
+        {{if .CXX}}CXX={{.CXX}}{{end}} {{if .TYPE}}TYPE={{.TYPE}}{{end}}
+        {{if .THREADS}}THREADS={{.THREADS}}{{end}} {{if .SAN}}SAN={{.SAN}}{{end}}
+    silent: true
+
+  list:
+    desc: список подпроектов
+    cmds: ['ls -d */ | grep -v template']
+    silent: true
+
+  check:
+    desc: проверка тулчейна
+    cmds:
+      - g++ --version | head -1
+      - clang++ --version | head -1
+      - cmake --version | head -1
+      - ninja --version
+      - gdb --version | head -1
+    silent: true
+
+  docker:build:
+    desc: собрать образ parallel-dev
+    cmds:
+      - docker build -t parallel-dev .
+
+  docker:shell:
+    desc: 'shell в контейнере с проектами (или команда: task docker:shell -- "cd lab1 && task run")'
+    deps: [docker:build]
+    cmds:
+      - >-
+        docker run --rm $([ -t 0 ] && echo -it) -v "$PWD":/work -v /usr/local/bin/task:/usr/local/bin/task:ro
+        --user "$(id -u):$(id -g)" -e HOME=/tmp parallel-dev {{if .CLI_ARGS}}bash -c {{.CLI_ARGS}}{{end}}

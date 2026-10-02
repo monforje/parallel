@@ -1,0 +1,9 @@
+[
+  { "label": "build", "command": "task build", "reveal": "always" },
+  { "label": "run", "command": "task run", "reveal": "always" },
+  { "label": "run (clang)", "command": "task run CXX=clang++", "reveal": "always" },
+  { "label": "debug (gdb)", "command": "task debug", "reveal": "always" },
+  { "label": "tsan", "command": "task tsan", "reveal": "always" },
+  { "label": "scaling", "command": "task scale", "reveal": "always" },
+  { "label": "format", "command": "task fmt", "reveal": "no_focus" }
+]
